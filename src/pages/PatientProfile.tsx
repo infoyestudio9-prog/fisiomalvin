@@ -11,6 +11,7 @@ import {
   Filter,
   X,
   ClipboardPlus,
+  Pencil,
   CheckCircle2,
 } from 'lucide-react';
 import { useClinic } from '../ClinicContext';
@@ -273,8 +274,12 @@ const goToCase = () => {
     setNotes('');
     setActiveTab('SESIONES');
   };
+  const openEditPatientModal = () => {
+  alert('Editar paciente pendiente de migrar');
+};
 
   const handleDischargePatient = async () => {
+    
     const confirmDischarge = window.confirm(
       '¿Confirmás dar de alta a este paciente? Se cerrará el caso clínico activo.'
     );
@@ -367,59 +372,65 @@ const handleSaveRecovery = async (
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <button
-          onClick={openSessionModal}
-          disabled={!patientCase || isDischarged}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition-colors',
-            patientCase && !isDischarged
-              ? 'bg-primary text-white hover:bg-primary-dark'
-              : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-          )}
-        >
-          <Plus className="w-4 h-4" />
-          Nueva Sesión
-        </button>
+  <button
+    onClick={openSessionModal}
+    disabled={!patientCase || isDischarged}
+    className={cn(
+      'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition-colors',
+      patientCase && !isDischarged
+        ? 'bg-primary text-white hover:bg-primary-dark'
+        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+    )}
+  >
+    <Plus className="w-4 h-4" />
+    Nueva Sesión
+  </button>
 
-        {!patientCase && !isDischarged && (
-          <button
-            onClick={() => setShowCaseModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold shadow-sm hover:bg-primary-dark"
-          >
-            <ClipboardPlus className="w-4 h-4" />
-            Nuevo Caso Clínico
-          </button>
-        )}
+  <button
+    onClick={openEditPatientModal}
+    className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50"
+  >
+    <Pencil className="w-4 h-4" />
+    Editar Paciente
+  </button>
 
-        
+  {!patientCase && !isDischarged && (
+    <button
+      onClick={() => setShowCaseModal(true)}
+      className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold shadow-sm hover:bg-primary-dark"
+    >
+      <ClipboardPlus className="w-4 h-4" />
+      Nuevo Caso Clínico
+    </button>
+  )}
 
-        {!isDischarged && (
-          <button
-            onClick={handleDischargePatient}
-            disabled={isDischarging}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-bold shadow-sm hover:bg-green-700 disabled:opacity-50"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            {isDischarging ? 'Procesando...' : 'Dar de Alta'}
-          </button>
-        )}
+  {!isDischarged && (
+    <button
+      onClick={handleDischargePatient}
+      disabled={isDischarging}
+      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-bold shadow-sm hover:bg-green-700 disabled:opacity-50"
+    >
+      <CheckCircle2 className="w-4 h-4" />
+      {isDischarging ? 'Procesando...' : 'Dar de Alta'}
+    </button>
+  )}
 
-        <button
-          onClick={() => setActiveTab('ARCHIVOS')}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50"
-        >
-          <FileUp className="w-4 h-4" />
-          Subir Archivo
-        </button>
+  <button
+    onClick={() => setActiveTab('ARCHIVOS')}
+    className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50"
+  >
+    <FileUp className="w-4 h-4" />
+    Subir Archivo
+  </button>
 
-        <button
-  onClick={() => setShowNoteModal(true)}
-  className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50"
->
-  <FileText className="w-4 h-4" />
-  Nota Médica
-</button>
-      </div>
+  <button
+    onClick={() => setShowNoteModal(true)}
+    className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50"
+  >
+    <FileText className="w-4 h-4" />
+    Nota Médica
+  </button>
+</div>
 
       <div className="border-b border-slate-200 flex gap-8 overflow-x-auto">
         {tabs.map((tab) => (
@@ -971,6 +982,7 @@ function FilesSection({ patient }: any) {
             title={file.title}
             date={`${file.type} · ${file.date || 'Sin fecha'}`}
             url={file.url}
+            type={file.type}
           />
         ))}
       </div>
