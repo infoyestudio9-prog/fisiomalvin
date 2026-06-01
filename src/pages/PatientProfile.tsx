@@ -12,6 +12,7 @@ import {
   X,
   ClipboardPlus,
   Pencil,
+  Archive,
   CheckCircle2,
 } from 'lucide-react';
 import { useClinic } from '../ClinicContext';
@@ -38,7 +39,7 @@ export default function PatientProfilePage() {
   const existingCase = clinicalCases.find((c) => c.patientId === id);
 
   const [supabasePatient, setSupabasePatient] = useState<any | null>(null);
-  const patient = contextPatient || supabasePatient;
+  const patient = supabasePatient || contextPatient;
 
   const [activeTab, setActiveTab] = useState<TabKey>('RESUMEN');
   const [localCase, setLocalCase] = useState<any | null>(existingCase || null);
@@ -46,6 +47,28 @@ export default function PatientProfilePage() {
 
   const [showCaseModal, setShowCaseModal] = useState(false);
   const [showSessionModal, setShowSessionModal] = useState(false);
+  const [showEditPatientModal, setShowEditPatientModal] = useState(false);
+  const [showEditCaseModal, setShowEditCaseModal] = useState(false);
+
+const [editCaseForm, setEditCaseForm] = useState({
+  title: existingCase?.title || '',
+  diagnosis: existingCase?.diagnosis || '',
+  stage: existingCase?.stage || 'Agudo',
+});
+
+const [editPatientForm, setEditPatientForm] = useState({
+  name: '',
+  internalId: '',
+  phone: '',
+  sport: '',
+  patientType: 'Particular',
+  status: 'INJURED',
+  bodyZone: '',
+  injuryType: '',
+  injuryDiagnosis: '',
+  injuryDetail: '',
+  painLevel: 0,
+});
   const [localStatus, setLocalStatus] = useState('');
   const [recoveryProgress, setRecoveryProgress] = useState(0);
   const [isDischarging, setIsDischarging] = useState(false);
@@ -64,8 +87,8 @@ export default function PatientProfilePage() {
   const [medicalNoteText, setMedicalNoteText] = useState('');
   const [medicalNotes, setMedicalNotes] = useState<any[]>([]);
 
-  useEffect(() => {
-    if (!id || contextPatient) return;
+ useEffect(() => {
+  if (!id) return;
 
     const fetchPatientFromSupabase = async () => {
       const { data, error } = await supabase
@@ -88,6 +111,12 @@ export default function PatientProfilePage() {
           injury: data.injury || '',
           status: data.status || 'INJURED',
           patientType: data.patient_type || 'Particular',
+          phone: data.phone || '',
+sport: data.sport || '',
+bodyZone: data.body_zone || '',
+injuryType: data.injury_type || '',
+injuryDiagnosis: data.injury_diagnosis || '',
+injuryDetail: data.injury_detail || '',
           painLevel: data.pain_level || 0,
           nextSession: data.next_session || '',
           assignedProfessionalId: data.assigned_professional_id || '',
@@ -275,9 +304,140 @@ const goToCase = () => {
     setActiveTab('SESIONES');
   };
   const openEditPatientModal = () => {
-  alert('Editar paciente pendiente de migrar');
+  console.log('ABRIENDO EDITAR PACIENTE', patient);
+
+  if (!patient) {
+    alert('No se encontró el paciente.');
+    return;
+  }
+
+  setEditPatientForm({
+    name: patient.name || '',
+    internalId: patient.internalId || '',
+    phone: patient.phone || '',
+    sport: patient.sport || '',
+    patientType: patient.patientType || 'Particular',
+    status: patient.status || 'INJURED',
+    bodyZone: patient.bodyZone || '',
+    injuryType: patient.injuryType || '',
+    injuryDiagnosis: patient.injuryDiagnosis || patient.injury || '',
+    injuryDetail: patient.injuryDetail || '',
+    painLevel: patient.painLevel || 0,
+  });
+
+  setShowEditPatientModal(true);
+};
+const handleSavePatient = async () => {
+  if (!editPatientForm.name.trim()) {
+    alert('Ingresá el nombre del paciente.');
+    return;
+  }
+
+  const injurySummary = [
+    editPatientForm.injuryDiagnosis,
+    editPatientForm.bodyZone,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const { error } = await supabase
+    .from('patients')
+    .update({
+      name: editPatientForm.name,
+      internal_id: editPatientForm.internalId,
+      phone: editPatientForm.phone,
+      sport: editPatientForm.sport,
+      patient_type: editPatientForm.patientType,
+      status: editPatientForm.status,
+      injury: injurySummary,
+      body_zone: editPatientForm.bodyZone,
+      injury_type: editPatientForm.injuryType,
+      injury_diagnosis: editPatientForm.injuryDiagnosis,
+      injury_detail: editPatientForm.injuryDetail,
+      pain_level: editPatientForm.painLevel,
+    })
+    .eq('id', patient.id);
+
+  if (error) {
+    console.error('Error actualizando paciente:', error);
+    alert('Error actualizando paciente');
+    return;
+  }
+
+  setSupabasePatient({
+    ...patient,
+    name: editPatientForm.name,
+    internalId: editPatientForm.internalId,
+    phone: editPatientForm.phone,
+    sport: editPatientForm.sport,
+    patientType: editPatientForm.patientType,
+    status: editPatientForm.status,
+    injury: injurySummary,
+    bodyZone: editPatientForm.bodyZone,
+    injuryType: editPatientForm.injuryType,
+    injuryDiagnosis: editPatientForm.injuryDiagnosis,
+    injuryDetail: editPatientForm.injuryDetail,
+    painLevel: editPatientForm.painLevel,
+  });
+
+  setLocalStatus(editPatientForm.status);
+  setShowEditPatientModal(false);
+};
+const openEditCaseModal = () => {
+  if (!patientCase) return;
+
+  setEditCaseForm({
+    title: patientCase.title || '',
+    diagnosis: patientCase.diagnosis || '',
+    stage: patientCase.stage || 'Agudo',
+  });
+
+  setShowEditCaseModal(true);
 };
 
+const handleSaveCase = async () => {
+  if (!patientCase) return;
+
+  const { error } = await supabase
+    .from('clinical_cases')
+    .update({
+      title: editCaseForm.title,
+      diagnosis: editCaseForm.diagnosis,
+      stage: editCaseForm.stage,
+    })
+    .eq('id', patientCase.id);
+
+  if (error) {
+    console.error('Error actualizando caso clínico:', error);
+    alert('Error actualizando caso clínico');
+    return;
+  }
+
+  setLocalCase({
+    ...patientCase,
+    title: editCaseForm.title,
+    diagnosis: editCaseForm.diagnosis,
+    stage: editCaseForm.stage,
+  });
+
+  setShowEditCaseModal(false);
+};
+const handleArchivePatient = async () => {
+  if (!confirm('¿Archivar este paciente?')) return;
+
+  const { error } = await supabase
+    .from('patients')
+    .update({ archived: true })
+    .eq('id', patient.id);
+
+  if (error) {
+    console.error(error);
+    alert('Error archivando paciente');
+    return;
+  }
+
+  navigate('/patients');
+};
   const handleDischargePatient = async () => {
     
     const confirmDischarge = window.confirm(
@@ -386,13 +546,32 @@ const handleSaveRecovery = async (
     Nueva Sesión
   </button>
 
-  <button
-    onClick={openEditPatientModal}
-    className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50"
-  >
-    <Pencil className="w-4 h-4" />
-    Editar Paciente
-  </button>
+ <button
+  type="button"
+  onClick={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openEditPatientModal();
+  }}
+  className="relative z-10 flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50"
+>
+  <Pencil className="w-4 h-4" />
+  Editar Paciente
+</button>
+
+
+<button
+  type="button"
+  onClick={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleArchivePatient();
+  }}
+  className="relative z-10 flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs font-bold text-amber-700 hover:bg-amber-100"
+>
+  <Archive className="w-4 h-4" />
+  Archivar Paciente
+</button>
 
   {!patientCase && !isDischarged && (
     <button
@@ -403,6 +582,20 @@ const handleSaveRecovery = async (
       Nuevo Caso Clínico
     </button>
   )}
+  {patientCase && (
+  <button
+    type="button"
+    onClick={(e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openEditCaseModal();
+    }}
+    className="relative z-10 flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50"
+  >
+    <ClipboardPlus className="w-4 h-4" />
+    Gestionar Caso
+  </button>
+)}
 
   {!isDischarged && (
     <button
@@ -643,6 +836,22 @@ const handleSaveRecovery = async (
     )}
   </div>
 )}
+{showEditPatientModal && (
+  <EditPatientModal
+    form={editPatientForm}
+    setForm={setEditPatientForm}
+    onClose={() => setShowEditPatientModal(false)}
+    onSubmit={handleSavePatient}
+  />
+)}
+{showEditCaseModal && (
+  <EditCaseModal
+    form={editCaseForm}
+    setForm={setEditCaseForm}
+    onClose={() => setShowEditCaseModal(false)}
+    onSubmit={handleSaveCase}
+  />
+)}
 
       {showCaseModal && (
         <CaseModal
@@ -745,7 +954,9 @@ function PatientInfoCard({ patient, patientCase, statusLabel }: any) {
         <Phone className="w-4 h-4 text-primary" />
         <div>
           <p className="text-[10px] text-slate-400 font-bold uppercase">Teléfono</p>
-          <p className="text-sm font-bold text-slate-700">Sin registrar</p>
+          <p className="text-sm font-bold text-slate-700">
+  {patient.phone || 'Sin registrar'}
+</p>
         </div>
       </div>
 
@@ -1302,6 +1513,167 @@ function SliderInput({ label, value, onChange }: any) {
         <span className="text-2xl font-bold text-slate-900 w-8 text-right">
           {value}
         </span>
+      </div>
+    </div>
+  );
+}
+function EditPatientModal({ form, setForm, onClose, onSubmit }: any) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50">
+      <div className="bg-white w-full max-w-2xl rounded-xl shadow-xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 className="font-bold text-slate-900">
+            Editar Paciente
+          </h2>
+
+          <button onClick={onClose}>
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Nombre"
+              value={form.name}
+              onChange={(v: string) => setForm({ ...form, name: v })}
+            />
+
+            <Input
+              label="CI / ID"
+              value={form.internalId}
+              onChange={(v: string) => setForm({ ...form, internalId: v })}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Teléfono"
+              value={form.phone}
+              onChange={(v: string) => setForm({ ...form, phone: v })}
+            />
+
+            <Input
+              label="Deporte"
+              value={form.sport}
+              onChange={(v: string) => setForm({ ...form, sport: v })}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+  <div>
+    <label className="text-[10px] uppercase font-bold text-slate-400">
+      Tipo de Paciente
+    </label>
+
+    <select
+      value={form.patientType || 'Particular'}
+      onChange={(e) => setForm({ ...form, patientType: e.target.value })}
+      className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
+    >
+      <option value="Socio del Club">Socio del Club</option>
+      <option value="Formativas">Formativas</option>
+      <option value="Particular">Particular</option>
+    </select>
+  </div>
+
+  <div>
+    <label className="text-[10px] uppercase font-bold text-slate-400">
+      Estado
+    </label>
+
+    <select
+      value={form.status || 'INJURED'}
+      onChange={(e) => setForm({ ...form, status: e.target.value })}
+      className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
+    >
+      <option value="ACTIVE">Activo</option>
+      <option value="INJURED">Lesionado</option>
+      <option value="DISCHARGED">De alta</option>
+    </select>
+  </div>
+
+  <Input
+    label="Zona corporal"
+    value={form.bodyZone}
+    onChange={(v: string) => setForm({ ...form, bodyZone: v })}
+  />
+</div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Tipo de lesión"
+              value={form.injuryType}
+              onChange={(v: string) => setForm({ ...form, injuryType: v })}
+            />
+
+            <Input
+              label="Dolor"
+              value={String(form.painLevel)}
+              onChange={(v: string) =>
+                setForm({ ...form, painLevel: Number(v) })
+              }
+            />
+          </div>
+
+          <Input
+            label="Diagnóstico"
+            value={form.injuryDiagnosis}
+            onChange={(v: string) => setForm({ ...form, injuryDiagnosis: v })}
+          />
+
+          <Textarea
+            label="Detalle"
+            value={form.injuryDetail}
+            onChange={(v: string) => setForm({ ...form, injuryDetail: v })}
+          />
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-xs font-bold text-slate-500"
+          >
+            Cancelar
+          </button>
+
+          <button
+            onClick={onSubmit}
+            className="px-5 py-2 bg-primary text-white rounded-lg text-xs font-bold"
+          >
+            Guardar Cambios
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function EditCaseModal({ form, setForm, onClose, onSubmit }: any) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50">
+      <div className="bg-white w-full max-w-xl rounded-xl shadow-xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 className="font-bold text-slate-900">Gestionar Caso Clínico</h2>
+          <button onClick={onClose}>
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <Input label="Título" value={form.title} onChange={(v: string) => setForm({ ...form, title: v })} />
+          <Textarea label="Diagnóstico" value={form.diagnosis} onChange={(v: string) => setForm({ ...form, diagnosis: v })} />
+          <Input label="Etapa" value={form.stage} onChange={(v: string) => setForm({ ...form, stage: v })} />
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-slate-500">
+            Cancelar
+          </button>
+
+          <button onClick={onSubmit} className="px-5 py-2 bg-primary text-white rounded-lg text-xs font-bold">
+            Guardar Cambios
+          </button>
+        </div>
       </div>
     </div>
   );

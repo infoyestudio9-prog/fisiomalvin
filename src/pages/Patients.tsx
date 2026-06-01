@@ -6,7 +6,7 @@ import { cn } from '../lib/utils';
 import { Patient, PatientStatus, PatientType } from '../types';
 import { supabase } from '../lib/supabase';
 
-type FilterKey = 'ALL' | 'ACTIVE' | 'INJURED' | 'DISCHARGED';
+type FilterKey = 'ALL' | 'ACTIVE' | 'INJURED' | 'DISCHARGED' | 'ARCHIVED';
 
 type PatientWithInjury = Patient & {
   phone?: string;
@@ -81,22 +81,27 @@ export default function PatientsPage() {
   });
 
   const fetchPatients = async () => {
-    const { data, error } = await supabase
-      .from('patients')
-      .select('*')
-      .order('created_at', { ascending: false });
+  const query = supabase
+    .from('patients')
+    .select('*')
+    .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error cargando pacientes:', error);
-      return;
-    }
+  const { data, error } =
+    activeFilter === 'ARCHIVED'
+      ? await query.eq('archived', true)
+      : await query.eq('archived', false);
 
-    setLocalPatients((data || []).map(mapPatient));
-  };
+  if (error) {
+    console.error('Error cargando pacientes:', error);
+    return;
+  }
+
+  setLocalPatients((data || []).map(mapPatient));
+};
 
   useEffect(() => {
-    fetchPatients();
-  }, []);
+  fetchPatients();
+}, [activeFilter]);
 
   const statusColors: Record<string, string> = {
     ACTIVE: 'bg-green-100 text-green-700',
@@ -119,36 +124,63 @@ export default function PatientsPage() {
     { label: 'Activos', value: 'ACTIVE' },
     { label: 'Lesionados', value: 'INJURED' },
     { label: 'De Alta', value: 'DISCHARGED' },
+    { label: 'Archivados', value: 'ARCHIVED' },
   ];
 
   const filteredPatients = useMemo(() => {
-    return localPatients.filter((patient) => {
-      const normalizedStatus = normalizeStatus(patient.status);
-      const matchesFilter = activeFilter === 'ALL' || normalizedStatus === activeFilter;
+  return localPatients.filter((patient) => {
+    const normalizedStatus = normalizeStatus(patient.status);
 
-      const search = searchTerm.toLowerCase().trim();
+    const matchesFilter =
+      activeFilter === 'ARCHIVED'
+        ? true
+        : activeFilter === 'ALL'
+          ? true
+          : normalizedStatus === activeFilter;
 
-      const matchesSearch =
-        search.length === 0 ||
-        patient.name.toLowerCase().includes(search) ||
-        patient.internalId?.toLowerCase().includes(search) ||
-        patient.phone?.toLowerCase().includes(search) ||
-        patient.injury?.toLowerCase().includes(search) ||
-        patient.bodyZone?.toLowerCase().includes(search) ||
-        patient.injuryType?.toLowerCase().includes(search) ||
-        patient.injuryDiagnosis?.toLowerCase().includes(search) ||
-        patient.injuryDetail?.toLowerCase().includes(search) ||
-        patient.sport?.toLowerCase().includes(search) ||
-        patient.patientType?.toLowerCase().includes(search);
+    const search = searchTerm.toLowerCase().trim();
 
-      return matchesFilter && matchesSearch;
-    });
-  }, [localPatients, activeFilter, searchTerm]);
+    const matchesSearch =
+      search.length === 0 ||
+      patient.name.toLowerCase().includes(search) ||
+      patient.internalId?.toLowerCase().includes(search) ||
+      patient.phone?.toLowerCase().includes(search) ||
+      patient.injury?.toLowerCase().includes(search) ||
+      patient.bodyZone?.toLowerCase().includes(search) ||
+      patient.injuryType?.toLowerCase().includes(search) ||
+      patient.injuryDiagnosis?.toLowerCase().includes(search) ||
+      patient.injuryDetail?.toLowerCase().includes(search) ||
+      patient.sport?.toLowerCase().includes(search) ||
+      patient.patientType?.toLowerCase().includes(search);
+
+    return matchesFilter && matchesSearch;
+  });
+}, [localPatients, activeFilter, searchTerm]);
 
   const activeCount = localPatients.filter((p) => normalizeStatus(p.status) === 'ACTIVE').length;
   const injuredCount = localPatients.filter((p) => normalizeStatus(p.status) === 'INJURED').length;
   const dischargedCount = localPatients.filter((p) => normalizeStatus(p.status) === 'DISCHARGED').length;
 
+  const handleRestorePatient = async (patientId: string) => {
+  const confirmRestore = window.confirm(
+    '¿Restaurar este paciente a la lista principal?'
+  );
+
+  if (!confirmRestore) return;
+
+  const { error } = await supabase
+    .from('patients')
+    .update({ archived: false })
+    .eq('id', patientId);
+
+  if (error) {
+    console.error('Error restaurando paciente:', error);
+    alert('Error restaurando paciente');
+    return;
+  }
+
+  await fetchPatients();
+};
   const handleCreatePatient = async () => {
     if (!form.name.trim()) {
       alert('Ingresá el nombre del paciente.');
@@ -368,10 +400,23 @@ export default function PatientsPage() {
                 </td>
 
                 <td className="px-6 py-3.5 text-right">
-                  <button className="p-2 text-slate-300 group-hover:text-primary">
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </td>
+  {activeFilter === 'ARCHIVED' ? (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        handleRestorePatient(patient.id);
+      }}
+      className="px-3 py-1.5 rounded-lg bg-green-50 border border-green-200 text-green-700 text-[10px] font-bold uppercase hover:bg-green-100"
+    >
+      Restaurar
+    </button>
+  ) : (
+    <button className="p-2 text-slate-300 group-hover:text-primary">
+      <ChevronRight className="w-4 h-4" />
+    </button>
+  )}
+</td>
               </tr>
             ))}
           </tbody>
