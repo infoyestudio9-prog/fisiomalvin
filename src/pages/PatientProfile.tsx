@@ -14,11 +14,18 @@ import {
   Pencil,
   Archive,
   CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 import { useClinic } from '../ClinicContext';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { Session } from '../types';
+import {
+  clinicalStatusColors,
+  clinicalStatusLabels,
+  getClinicalStatus,
+  mapPatientFromSupabase,
+} from '../lib/clinicData';
 
 type TabKey = 'RESUMEN' | 'CASO' | 'SESIONES' | 'ARCHIVOS' | 'NOTAS';
 
@@ -36,7 +43,8 @@ export default function PatientProfilePage() {
 
   const contextPatient = getPatientById(id || '');
   const sessions = getSessionsByPatient(id || '');
-  const existingCase = clinicalCases.find((c) => c.patientId === id);
+  const existingCase = clinicalCases.find((c) => c.patientId === id && c.status === 'OPEN') ||
+    clinicalCases.find((c) => c.patientId === id);
 
   const [supabasePatient, setSupabasePatient] = useState<any | null>(null);
   const patient = supabasePatient || contextPatient;
@@ -44,6 +52,13 @@ export default function PatientProfilePage() {
   const [activeTab, setActiveTab] = useState<TabKey>('RESUMEN');
   const [localCase, setLocalCase] = useState<any | null>(existingCase || null);
   const patientCase = localCase || existingCase;
+  const patientCases = [
+    ...(localCase && !clinicalCases.some((c) => c.id === localCase.id) ? [localCase] : []),
+    ...clinicalCases.filter((c) => c.patientId === id),
+  ].sort((a, b) => {
+    if (a.status !== b.status) return a.status === 'OPEN' ? -1 : 1;
+    return String(b.startDate || '').localeCompare(String(a.startDate || ''));
+  });
 
   const [showCaseModal, setShowCaseModal] = useState(false);
   const [showSessionModal, setShowSessionModal] = useState(false);
@@ -103,30 +118,7 @@ const [editPatientForm, setEditPatientForm] = useState({
       }
 
       if (data) {
-        setSupabasePatient({
-          id: data.id,
-          name: data.name,
-          internalId: data.internal_id || '',
-          team: data.team || '',
-          injury: data.injury || '',
-          status: data.status || 'INJURED',
-          patientType: data.patient_type || 'Particular',
-          phone: data.phone || '',
-sport: data.sport || '',
-bodyZone: data.body_zone || '',
-injuryType: data.injury_type || '',
-injuryDiagnosis: data.injury_diagnosis || '',
-injuryDetail: data.injury_detail || '',
-          painLevel: data.pain_level || 0,
-          nextSession: data.next_session || '',
-          assignedProfessionalId: data.assigned_professional_id || '',
-          avatar: data.avatar || '',
-          mobility: data.mobility || 0,
-          recoveryProgress: data.recovery_progress || 0,
-          sessionsCompleted: data.sessions_completed || 0,
-          totalSessionsTarget: data.total_sessions_target || 0,
-          lastSessionDate: data.last_session_date || '',
-        });
+        setSupabasePatient(mapPatientFromSupabase(data));
       }
     };
 
@@ -166,7 +158,9 @@ injuryDetail: data.injury_detail || '',
   if (!patient) return <div className="p-6">Cargando paciente...</div>;
 
   const currentStatus = localStatus || patient.status;
-  const isDischarged = currentStatus === 'DISCHARGED';
+  const clinicalStatus = getClinicalStatus({ ...patient, status: currentStatus });
+  const isPendingClinicalIntake = clinicalStatus === 'PENDING';
+  const isDischarged = clinicalStatus === 'DISCHARGED';
 
   const calculateRecoveryProgress = () => {
   if (isDischarged) return 100;
@@ -194,12 +188,7 @@ injuryDetail: data.injury_detail || '',
 
 const recovery = recoveryProgress;
 
-  const statusLabel =
-    currentStatus === 'ACTIVE'
-      ? 'Activo'
-      : currentStatus === 'DISCHARGED'
-        ? 'De alta'
-        : 'Lesionado';
+  const statusLabel = clinicalStatusLabels[clinicalStatus];
 
   const tabs: { label: string; value: TabKey }[] = [
     { label: 'Resumen', value: 'RESUMEN' },
@@ -625,6 +614,29 @@ const handleSaveRecovery = async (
   </button>
 </div>
 
+      {isPendingClinicalIntake && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+            <div>
+              <p className="text-sm font-bold text-amber-800">
+                Pendiente de ingreso clínico
+              </p>
+              <p className="text-sm text-amber-700">
+                Este paciente completó datos básicos. Falta confirmar valoración, diagnóstico y tipo de lesión.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={openEditPatientModal}
+            className="px-4 py-2 bg-white border border-amber-200 rounded-lg text-xs font-bold text-amber-700 hover:bg-amber-100"
+          >
+            Completar valoración
+          </button>
+        </div>
+      )}
+
       <div className="border-b border-slate-200 flex gap-8 overflow-x-auto">
         {tabs.map((tab) => (
           <button
@@ -649,6 +661,7 @@ const handleSaveRecovery = async (
         patient={patient}
         patientCase={patientCase}
         statusLabel={statusLabel}
+        clinicalStatus={clinicalStatus}
       />
 
       <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm p-6">
@@ -746,6 +759,8 @@ const handleSaveRecovery = async (
       </div>
     </div>
 
+    <PatientClinicalOverview patient={patient} patientCase={patientCase} />
+
     <SessionsTable
       sessions={sessions}
       openSessionModal={openSessionModal}
@@ -776,6 +791,7 @@ const handleSaveRecovery = async (
               <InfoBox label="Título" value={patientCase.title} />
               <InfoBox label="Estado del caso" value={patientCase.status === 'CLOSED' ? 'Cerrado' : 'Abierto'} />
               <InfoBox label="Inicio" value={patientCase.startDate || 'Sin fecha'} />
+              <InfoBox label="Etapa" value={patientCase.stage || 'Sin etapa'} />
               <div className="md:col-span-3 border border-slate-100 rounded-xl p-4">
                 <p className="text-[10px] uppercase font-bold text-slate-400 mb-2">
                   Diagnóstico
@@ -786,6 +802,8 @@ const handleSaveRecovery = async (
               </div>
             </div>
           )}
+
+          <CaseHistory cases={patientCases} />
         </div>
       )}
 
@@ -929,7 +947,7 @@ const handleSaveRecovery = async (
   );
 }
 
-function PatientInfoCard({ patient, patientCase, statusLabel }: any) {
+function PatientInfoCard({ patient, patientCase, statusLabel, clinicalStatus }: any) {
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
       <div className="flex items-center gap-4">
@@ -944,9 +962,14 @@ function PatientInfoCard({ patient, patientCase, statusLabel }: any) {
           <h2 className="text-2xl font-bold text-slate-900 mt-2 leading-none">
             {patient.name}
           </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Estado: {statusLabel}
-          </p>
+          <span
+            className={cn(
+              'inline-flex mt-2 px-2 py-1 rounded text-[10px] font-bold uppercase',
+              clinicalStatusColors[clinicalStatus]
+            )}
+          >
+            {statusLabel}
+          </span>
         </div>
       </div>
 
@@ -967,6 +990,94 @@ function PatientInfoCard({ patient, patientCase, statusLabel }: any) {
         <p className="text-sm text-slate-700 italic leading-relaxed">
           {patientCase?.diagnosis || patient.injury || 'Sin diagnóstico cargado.'}
         </p>
+      </div>
+    </div>
+  );
+}
+
+function PatientClinicalOverview({ patient, patientCase }: any) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <OverviewPanel title="Datos del paciente">
+        <InfoRow label="Nombre" value={patient.name} />
+        <InfoRow label="CI / ID jugador" value={patient.internalId || 'Sin registrar'} />
+        <InfoRow label="Teléfono" value={patient.phone || 'Sin registrar'} />
+        <InfoRow label="Tipo" value={patient.patientType || 'Particular'} />
+        <InfoRow label="Deporte / equipo" value={patient.sport || patient.team || 'Sin registrar'} />
+      </OverviewPanel>
+
+      <OverviewPanel title="Ingreso del paciente">
+        <InfoRow label="Motivo de consulta" value={patient.injuryDetail || patient.injury || 'Sin registrar'} />
+        <InfoRow label="Zona referida" value={patient.bodyZone || 'Sin registrar'} />
+        <InfoRow label="Dolor informado" value={`${patient.painLevel ?? 0}/10`} />
+        <InfoRow label="Última sesión" value={patient.lastSessionDate ? new Date(patient.lastSessionDate).toLocaleDateString() : 'Sin sesiones'} />
+      </OverviewPanel>
+
+      <OverviewPanel title="Valoración clínica">
+        <InfoRow label="Diagnóstico" value={patient.injuryDiagnosis || patientCase?.diagnosis || 'Pendiente'} />
+        <InfoRow label="Tipo de lesión" value={patient.injuryType || 'Pendiente'} />
+        <InfoRow label="Caso activo" value={patientCase?.title || 'Sin caso activo'} />
+        <InfoRow label="Etapa" value={patientCase?.stage || 'Sin etapa'} />
+      </OverviewPanel>
+    </div>
+  );
+}
+
+function OverviewPanel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+      <h3 className="text-xs uppercase tracking-wider font-bold text-slate-500 mb-4">
+        {title}
+      </h3>
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-b border-slate-100 pb-2 last:border-b-0 last:pb-0">
+      <p className="text-[10px] uppercase font-bold text-slate-400">{label}</p>
+      <p className="text-sm font-semibold text-slate-800 mt-0.5">{value}</p>
+    </div>
+  );
+}
+
+function CaseHistory({ cases }: { cases: any[] }) {
+  if (!cases.length) return null;
+
+  return (
+    <div className="mt-6 border-t border-slate-100 pt-5">
+      <h3 className="text-xs uppercase tracking-wider font-bold text-slate-500 mb-3">
+        Historial de casos
+      </h3>
+
+      <div className="space-y-2">
+        {cases.map((clinicalCase) => (
+          <div
+            key={clinicalCase.id}
+            className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 rounded-lg border border-slate-100 px-4 py-3"
+          >
+            <div>
+              <p className="text-sm font-bold text-slate-800">{clinicalCase.title}</p>
+              <p className="text-xs text-slate-500">
+                {clinicalCase.diagnosis || 'Sin diagnóstico'} · Inicio {clinicalCase.startDate || 'sin fecha'}
+                {clinicalCase.endDate ? ` · Cierre ${clinicalCase.endDate}` : ''}
+              </p>
+            </div>
+
+            <span
+              className={cn(
+                'w-fit rounded px-2 py-1 text-[10px] font-bold uppercase',
+                clinicalCase.status === 'OPEN'
+                  ? 'bg-green-50 text-green-700'
+                  : 'bg-slate-100 text-slate-500'
+              )}
+            >
+              {clinicalCase.status === 'OPEN' ? 'Abierto' : 'Cerrado'}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );

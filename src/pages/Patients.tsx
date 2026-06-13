@@ -3,63 +3,24 @@ import { Search, Filter, Plus, Download, ChevronRight, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
-import { Patient, PatientStatus, PatientType } from '../types';
+import { PatientStatus, PatientType } from '../types';
 import { supabase } from '../lib/supabase';
+import {
+  clinicalStatusColors,
+  clinicalStatusLabels,
+  getClinicalStatus,
+  isClubPatientType,
+  mapPatientFromSupabase,
+  PatientRecord,
+} from '../lib/clinicData';
 
-type FilterKey = 'ALL' | 'ACTIVE' | 'INJURED' | 'DISCHARGED' | 'ARCHIVED';
-
-type PatientWithInjury = Patient & {
-  phone?: string;
-  bodyZone?: string;
-  injuryType?: string;
-  injuryDiagnosis?: string;
-  injuryDetail?: string;
-  sport?: string;
-  clubMember?: boolean;
-  patientType?: PatientType;
-};
-
-function normalizeStatus(status: string): FilterKey {
-  if (status === 'TREATMENT') return 'INJURED';
-  if (status === 'WARNING') return 'ACTIVE';
-  if (status === 'ACTIVE') return 'ACTIVE';
-  if (status === 'INJURED') return 'INJURED';
-  if (status === 'DISCHARGED') return 'DISCHARGED';
-  return 'INJURED';
-}
-
-function mapPatient(row: any): PatientWithInjury {
-  return {
-    id: row.id,
-    name: row.name,
-    internalId: row.internal_id,
-    team: row.team || '',
-    injury: row.injury || '',
-    status: row.status,
-    patientType: row.patient_type || 'Particular',
-    painLevel: row.pain_level || 0,
-    mobility: row.mobility || 0,
-    sessionsCompleted: row.sessions_completed || 0,
-    totalSessionsTarget: row.total_sessions_target || 0,
-    recoveryProgress: row.recovery_progress || 0,
-    assignedProfessionalId: row.assigned_professional_id || '',
-    avatar: row.avatar || '',
-    nextSession: row.next_session || '',
-    lastSessionDate: row.last_session_date || '',
-    phone: row.phone || '',
-    bodyZone: row.body_zone || '',
-    injuryType: row.injury_type || '',
-    injuryDiagnosis: row.injury_diagnosis || '',
-    injuryDetail: row.injury_detail || '',
-    sport: row.sport || '',
-    clubMember: row.club_member || false,
-  };
-}
+type FilterKey = 'ALL' | 'PENDING' | 'ACTIVE' | 'INJURED' | 'DISCHARGED' | 'ARCHIVED';
 
 export default function PatientsPage() {
   const navigate = useNavigate();
 
-  const [localPatients, setLocalPatients] = useState<PatientWithInjury[]>([]);
+  const [localPatients, setLocalPatients] = useState<PatientRecord[]>([]);
+  const [databaseError, setDatabaseError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterKey>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
@@ -93,50 +54,39 @@ export default function PatientsPage() {
 
   if (error) {
     console.error('Error cargando pacientes:', error);
+    setDatabaseError(
+      `No se pudo conectar con Supabase: ${error.message || 'revisá la URL del proyecto en .env.'}`
+    );
     return;
   }
 
-  setLocalPatients((data || []).map(mapPatient));
+  setDatabaseError('');
+  setLocalPatients((data || []).map(mapPatientFromSupabase));
 };
 
   useEffect(() => {
   fetchPatients();
 }, [activeFilter]);
 
-  const statusColors: Record<string, string> = {
-    ACTIVE: 'bg-green-100 text-green-700',
-    INJURED: 'bg-red-100 text-red-700',
-    DISCHARGED: 'bg-slate-100 text-slate-500',
-    TREATMENT: 'bg-red-100 text-red-700',
-    WARNING: 'bg-green-100 text-green-700',
-  };
-
-  const statusLabels: Record<string, string> = {
-    ACTIVE: 'Activo',
-    INJURED: 'Lesionado',
-    DISCHARGED: 'De alta',
-    TREATMENT: 'Lesionado',
-    WARNING: 'Activo',
-  };
-
   const filters: { label: string; value: FilterKey }[] = [
     { label: 'Todos', value: 'ALL' },
+    { label: 'Pendientes de Ingreso Clínico', value: 'PENDING' },
     { label: 'Activos', value: 'ACTIVE' },
-    { label: 'Lesionados', value: 'INJURED' },
+    { label: 'En tratamiento', value: 'INJURED' },
     { label: 'De Alta', value: 'DISCHARGED' },
     { label: 'Archivados', value: 'ARCHIVED' },
   ];
 
   const filteredPatients = useMemo(() => {
   return localPatients.filter((patient) => {
-    const normalizedStatus = normalizeStatus(patient.status);
+    const clinicalStatus = getClinicalStatus(patient);
 
     const matchesFilter =
       activeFilter === 'ARCHIVED'
         ? true
         : activeFilter === 'ALL'
           ? true
-          : normalizedStatus === activeFilter;
+          : clinicalStatus === activeFilter;
 
     const search = searchTerm.toLowerCase().trim();
 
@@ -157,9 +107,10 @@ export default function PatientsPage() {
   });
 }, [localPatients, activeFilter, searchTerm]);
 
-  const activeCount = localPatients.filter((p) => normalizeStatus(p.status) === 'ACTIVE').length;
-  const injuredCount = localPatients.filter((p) => normalizeStatus(p.status) === 'INJURED').length;
-  const dischargedCount = localPatients.filter((p) => normalizeStatus(p.status) === 'DISCHARGED').length;
+  const pendingCount = localPatients.filter((p) => getClinicalStatus(p) === 'PENDING').length;
+  const activeCount = localPatients.filter((p) => getClinicalStatus(p) === 'ACTIVE').length;
+  const injuredCount = localPatients.filter((p) => getClinicalStatus(p) === 'INJURED').length;
+  const dischargedCount = localPatients.filter((p) => getClinicalStatus(p) === 'DISCHARGED').length;
 
   const handleRestorePatient = async (patientId: string) => {
   const confirmRestore = window.confirm(
@@ -203,7 +154,7 @@ export default function PatientsPage() {
       status: form.status,
       sport: form.sport,
       patient_type: form.patientType,
-      club_member: form.patientType === 'Socio del Club' || form.patientType === 'Formativas',
+      club_member: isClubPatientType(form.patientType),
       injury: injurySummary,
       body_zone: form.bodyZone,
       injury_type: form.injuryType,
@@ -255,8 +206,6 @@ export default function PatientsPage() {
         </div>
 
         <div className="flex items-center gap-2 w-full lg:w-auto">
-          
-
           <button
             onClick={() => setShowModal(true)}
             className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm shadow-primary/20 hover:bg-primary-dark active:scale-95"
@@ -284,11 +233,17 @@ export default function PatientsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="Total Pacientes" value={localPatients.length} detail="registrados" />
+        <StatCard title="Pendientes" value={pendingCount} detail="ingreso clínico" warning />
         <StatCard title="Activos" value={activeCount} detail="entrenan/juegan" />
-        <StatCard title="Lesionados" value={injuredCount} detail="sin entrenar" danger />
+        <StatCard title="En tratamiento" value={injuredCount} detail="seguimiento" danger />
         <StatCard title="De Alta" value={dischargedCount} detail="finalizados" />
       </div>
+
+      {databaseError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {databaseError}
+        </div>
+      )}
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
         <div className="px-6 py-4 border-b border-slate-50 bg-slate-50/50 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -337,6 +292,10 @@ export default function PatientsPage() {
             )}
 
             {filteredPatients.map((patient) => (
+              (() => {
+                const clinicalStatus = getClinicalStatus(patient);
+
+                return (
               <tr
                 key={patient.id}
                 className="group hover:bg-slate-50/80 cursor-pointer"
@@ -388,8 +347,8 @@ export default function PatientsPage() {
                 </td>
 
                 <td className="px-6 py-3.5">
-                  <span className={cn('px-2 py-0.5 rounded text-[10px] font-bold uppercase', statusColors[patient.status])}>
-                    {statusLabels[patient.status]}
+                  <span className={cn('px-2 py-0.5 rounded text-[10px] font-bold uppercase', clinicalStatusColors[clinicalStatus])}>
+                    {clinicalStatusLabels[clinicalStatus]}
                   </span>
                 </td>
 
@@ -418,6 +377,8 @@ export default function PatientsPage() {
   )}
 </td>
               </tr>
+                );
+              })()
             ))}
           </tbody>
         </table>
@@ -541,15 +502,31 @@ export default function PatientsPage() {
   );
 }
 
-function StatCard({ title, value, detail, danger = false }: any) {
+function StatCard({ title, value, detail, danger = false, warning = false }: any) {
   return (
-    <div className={cn('bg-white p-4 rounded-xl border border-slate-200 shadow-sm', danger && 'border-l-4 border-l-red-500')}>
-      <p className={cn('text-[10px] font-bold uppercase tracking-wider', danger ? 'text-red-500' : 'text-slate-400')}>
+    <div
+      className={cn(
+        'bg-white p-4 rounded-xl border border-slate-200 shadow-sm',
+        danger && 'border-l-4 border-l-red-500',
+        warning && 'border-l-4 border-l-amber-500'
+      )}
+    >
+      <p
+        className={cn(
+          'text-[10px] font-bold uppercase tracking-wider',
+          danger ? 'text-red-500' : warning ? 'text-amber-600' : 'text-slate-400'
+        )}
+      >
         {title}
       </p>
       <div className="flex items-baseline gap-2 mt-1">
         <span className="text-2xl font-bold text-slate-900">{value}</span>
-        <span className={cn('text-[10px] font-bold', danger ? 'text-red-400' : 'text-green-600')}>
+        <span
+          className={cn(
+            'text-[10px] font-bold',
+            danger ? 'text-red-400' : warning ? 'text-amber-600' : 'text-green-600'
+          )}
+        >
           {detail}
         </span>
       </div>

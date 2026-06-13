@@ -7,6 +7,7 @@ import PatientsPage from './pages/Patients';
 import PatientProfilePage from './pages/PatientProfile';
 import ClinicalCasePage from './pages/ClinicalCase';
 import InjuriesPage from './pages/Injuries';
+import PatientIntakePage from './pages/PatientIntake';
 
 import { Layout } from './components/Layout';
 
@@ -30,6 +31,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<LoginPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/ingreso" element={<PatientIntakePage />} />
 
           <Route path="/" element={<Layout />}>
             <Route path="patients" element={<PatientsPage />} />

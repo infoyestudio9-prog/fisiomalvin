@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ingreso de pacientes - QR</title>
+    <style>
+      :root {
+        --primary: #2563eb;
+        --primary-dark: #1e3a8a;
+        --ink: #0f172a;
+        --muted: #64748b;
+        --line: #dbe3ef;
+        --surface: #f8fafc;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--surface);
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0 auto;
+        padding: 18mm;
+        background: white;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .mark {
+        width: 46px;
+        height: 46px;
+        border-radius: 12px;
+        background: var(--primary);
+        color: white;
+        display: grid;
+        place-items: center;
+        font-size: 28px;
+        font-weight: 800;
+      }
+
+      .brand-title {
+        font-size: 28px;
+        font-weight: 850;
+        letter-spacing: -0.01em;
+      }
+
+      .brand-subtitle {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .hero {
+        margin-top: 30mm;
+        text-align: center;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 44px;
+        line-height: 1.03;
+        letter-spacing: 0;
+      }
+
+      .lead {
+        max-width: 138mm;
+        margin: 8mm auto 0;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1.4;
+      }
+
+      .qr-wrap {
+        width: 96mm;
+        height: 96mm;
+        margin: 18mm auto 0;
+        padding: 9mm;
+        border: 2px solid var(--line);
+        border-radius: 10mm;
+        display: grid;
+        place-items: center;
+      }
+
+      .qr {
+        width: 78mm;
+        height: 78mm;
+        display: block;
+      }
+
+      .qr-message {
+        display: none;
+        color: var(--primary-dark);
+        font-size: 18px;
+        font-weight: 850;
+        line-height: 1.25;
+        padding: 0 5mm;
+      }
+
+      .url {
+        max-width: 150mm;
+        margin: 7mm auto 0;
+        padding: 4mm 5mm;
+        border-radius: 5mm;
+        background: #eff6ff;
+        color: var(--primary-dark);
+        font-size: 16px;
+        font-weight: 800;
+        overflow-wrap: anywhere;
+      }
+
+      .setup-warning {
+        display: none;
+        max-width: 150mm;
+        margin: 5mm auto 0;
+        padding: 4mm 5mm;
+        border: 1px solid #facc15;
+        border-radius: 5mm;
+        background: #fefce8;
+        color: #854d0e;
+        font-size: 14px;
+        font-weight: 750;
+        line-height: 1.35;
+      }
+
+      .steps {
+        margin: 18mm auto 0;
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 5mm;
+      }
+
+      .step {
+        border: 1px solid var(--line);
+        border-radius: 5mm;
+        padding: 6mm;
+        min-height: 34mm;
+      }
+
+      .step-number {
+        width: 9mm;
+        height: 9mm;
+        border-radius: 50%;
+        background: var(--primary);
+        color: white;
+        display: grid;
+        place-items: center;
+        font-size: 14px;
+        font-weight: 900;
+      }
+
+      .step p {
+        margin: 4mm 0 0;
+        color: var(--ink);
+        font-size: 15px;
+        font-weight: 750;
+        line-height: 1.3;
+      }
+
+      .footer {
+        margin-top: auto;
+        border-top: 1px solid var(--line);
+        padding-top: 7mm;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+        text-align: center;
+      }
+
+      @media print {
+        body {
+          background: white;
+        }
+
+        .page {
+          width: auto;
+          min-height: auto;
+          margin: 0;
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="brand">
+        <div class="mark">+</div>
+        <div>
+          <div class="brand-title">FisioMalvin</div>
+          <div class="brand-subtitle">Ingreso de pacientes</div>
+        </div>
+      </header>
+
+      <section class="hero">
+        <h1>Escaneá y completá tus datos</h1>
+        <p class="lead">
+          Mientras esperás, registrá tu información básica para conocerte,
+          identificarte y crear tu seguimiento e historial.
+        </p>
+
+        <div class="qr-wrap">
+          <img id="qr" class="qr" alt="QR para ingreso de pacientes" />
+          <div id="qr-message" class="qr-message">Falta configurar la URL del formulario</div>
+        </div>
+
+        <div id="url" class="url"></div>
+        <div id="setup-warning" class="setup-warning">
+          Para imprimir este cartel, abrilo agregando la URL real del formulario:
+          <br />
+          <strong>?url=https://tu-dominio.com/ingreso</strong>
+        </div>
+      </section>
+
+      <section class="steps" aria-label="Pasos para ingresar">
+        <div class="step">
+          <div class="step-number">1</div>
+          <p>Escaneá el QR con la cámara del celular.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <p>Completá tus datos y motivo de consulta.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <p>Conversá con el fisio para ingresar correctamente la cédula, el estado y la escala de dolor.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">4</div>
+          <p>Avisá al equipo cuando hayas terminado.</p>
+        </div>
+      </section>
+
+      <footer class="footer">
+        Si tenés dificultad para completar el formulario, pedí ayuda al equipo de fisioterapia.
+      </footer>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const isHttp = window.location.protocol.startsWith('http');
+      const isLocal =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const providedUrl = params.get('url');
+      const fallbackUrl =
+        isHttp && window.location.hostname && !isLocal
+          ? `${window.location.origin}/ingreso`
+          : '';
+      const intakeUrl = providedUrl || fallbackUrl;
+
+      if (intakeUrl) {
+        document.getElementById('url').textContent = intakeUrl;
+        document.getElementById('qr').src =
+          `https://api.qrserver.com/v1/create-qr-code/?size=900x900&margin=16&data=${encodeURIComponent(intakeUrl)}`;
+      } else {
+        document.getElementById('qr').style.display = 'none';
+        document.getElementById('qr-message').style.display = 'block';
+        document.getElementById('url').textContent = 'URL del formulario pendiente';
+        document.getElementById('setup-warning').style.display = 'block';
+      }
+    </script>
+  </body>
+</html>

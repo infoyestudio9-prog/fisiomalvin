@@ -2,6 +2,12 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { Patient, Session, ClinicalCase, ClinicalAlert, User } from './types';
 import { MOCK_ALERTS } from './constants';
 import { supabase } from './lib/supabase';
+import {
+  mapClinicalCaseFromSupabase,
+  mapPatientFromSupabase,
+  mapSessionFromSupabase,
+  mapUserFromSupabase,
+} from './lib/clinicData';
 
 interface ClinicContextType {
   patients: Patient[];
@@ -26,60 +32,6 @@ const isValidUuid = (value?: string) => {
     value
   );
 };
-
-const mapPatientFromSupabase = (row: any): Patient => ({
-  id: row.id,
-  name: row.name,
-  internalId: row.internal_id,
-  team: row.team || '',
-  injury: row.injury || '',
-  status: row.status,
-  patientType: row.patient_type || 'Particular',
-  painLevel: row.pain_level || 0,
-  nextSession: row.next_session || '',
-  assignedProfessionalId: row.assigned_professional_id || '',
-  avatar: row.avatar || '',
-  mobility: row.mobility || 0,
-  recoveryProgress: row.recovery_progress || 0,
-  sessionsCompleted: row.sessions_completed || 0,
-  totalSessionsTarget: row.total_sessions_target || 0,
-  lastSessionDate: row.last_session_date || '',
-});
-
-const mapClinicalCaseFromSupabase = (row: any): ClinicalCase => ({
-  id: row.id,
-  patientId: row.patient_id,
-  title: row.title,
-  diagnosis: row.diagnosis || '',
-  status: row.status,
-  stage: row.stage || '',
-  assignedProfessionalId: row.assigned_professional_id || '',
-  startDate: row.start_date,
-  endDate: row.end_date || '',
-});
-
-const mapSessionFromSupabase = (row: any): Session => ({
-  id: row.id,
-  patientId: row.patient_id,
-  clinicalCaseId: row.clinical_case_id,
-  date: row.date,
-  professionalId: row.professional_id || '',
-  painBefore: row.pain_before,
-  painAfter: row.pain_after,
-  treatmentTags: row.treatment_tags || [],
-  notes: row.notes || '',
-  result: row.result,
-  nextSessionDate: row.next_session_date || '',
-  needsMedicalReview: row.needs_medical_review || false,
-});
-
-const mapUserFromSupabase = (row: any): User => ({
-  id: row.id,
-  name: row.name,
-  email: row.email,
-  role: row.role,
-  avatar: row.avatar || '',
-});
 
 const getStoredUser = (): User | null => {
   try {

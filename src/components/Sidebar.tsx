@@ -10,10 +10,12 @@ import {
   Activity,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useClinic } from '../ClinicContext';
 
 const APP_NAME = 'FisioMalvin';
 
 export function Sidebar() {
+  const { setCurrentUser } = useClinic();
   const navItems = [
     { title: 'Inicio', icon: LayoutDashboard, path: '/login' },
     { title: 'Pacientes', icon: Users, path: '/patients' },
@@ -59,6 +61,7 @@ export function Sidebar() {
       <div className="p-4 border-t border-slate-800">
         <NavLink
           to="/login"
+          onClick={() => setCurrentUser(null)}
           className="flex items-center gap-3 w-full px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white rounded-lg text-sm font-medium transition-all group"
         >
           <LogOut className="w-5 h-5 group-hover:translate-x-1 transition-transform" />

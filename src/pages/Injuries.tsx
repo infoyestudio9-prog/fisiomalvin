@@ -5,10 +5,19 @@ import {
   Layers,
   MapPin,
   ClipboardList,
+  Users,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
 import { supabase } from '../lib/supabase';
 import { cn } from '../lib/utils';
+import {
+  clinicalStatusColors,
+  clinicalStatusLabels,
+  getClinicalStatus,
+  isPendingClinicalIntake,
+} from '../lib/clinicData';
 
 type InjuryRow = {
   id: string;
@@ -18,6 +27,8 @@ type InjuryRow = {
   injury_diagnosis: string;
   body_zone: string;
   status: string;
+  patient_type: string;
+  archived?: boolean;
 };
 
 export default function InjuriesPage() {
@@ -38,7 +49,9 @@ export default function InjuriesPage() {
         injury_type,
         injury_diagnosis,
         body_zone,
-        status
+        status,
+        patient_type,
+        archived
       `);
 
     if (error) {
@@ -46,8 +59,15 @@ export default function InjuriesPage() {
       return;
     }
 
-    setPatients(data || []);
+    setPatients((data || []).filter((patient) => !patient.archived));
   };
+
+  const valuedPatients = patients.filter((patient) => !isPendingClinicalIntake({
+    status: patient.status as any,
+    injuryDiagnosis: patient.injury_diagnosis,
+    injuryType: patient.injury_type,
+    archived: patient.archived,
+  }));
 
   const filtered = useMemo(() => {
     const s = search.toLowerCase().trim();
@@ -68,22 +88,40 @@ export default function InjuriesPage() {
     });
   }, [patients, search]);
 
+  const pendingCount = patients.length - valuedPatients.length;
+  const treatmentCount = patients.filter((patient) => getClinicalStatus({
+    status: patient.status as any,
+    injuryDiagnosis: patient.injury_diagnosis,
+    injuryType: patient.injury_type,
+  }) === 'INJURED').length;
+  const dischargedCount = patients.filter((patient) => getClinicalStatus({
+    status: patient.status as any,
+    injuryDiagnosis: patient.injury_diagnosis,
+    injuryType: patient.injury_type,
+  }) === 'DISCHARGED').length;
+
   const byDiagnosis = countBy(
-    patients,
+    valuedPatients,
     'injury_diagnosis',
     'Sin diagnóstico'
   );
 
   const byType = countBy(
-    patients,
+    valuedPatients,
     'injury_type',
     'Sin tipo'
   );
 
   const byZone = countBy(
-    patients,
+    valuedPatients,
     'body_zone',
     'Sin zona'
+  );
+
+  const byPatientType = countBy(
+    patients,
+    'patient_type',
+    'Particular'
   );
 
   return (
@@ -100,8 +138,15 @@ export default function InjuriesPage() {
         </p>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <MetricCard title="Pacientes con lesión" value={valuedPatients.length} detail="valorados" icon={ClipboardList} />
+        <MetricCard title="Pendientes" value={pendingCount} detail="ingreso clínico" icon={AlertCircle} warning />
+        <MetricCard title="Tratamiento" value={treatmentCount} detail="seguimiento activo" icon={Activity} danger />
+        <MetricCard title="Altas" value={dischargedCount} detail="casos finalizados" icon={CheckCircle2} />
+      </div>
+
       {/* CARDS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
 
         <RankingCard
           title="Lesiones por diagnóstico"
@@ -119,6 +164,12 @@ export default function InjuriesPage() {
           title="Lesiones por zona corporal"
           icon={MapPin}
           items={byZone}
+        />
+
+        <RankingCard
+          title="Por tipo de paciente"
+          icon={Users}
+          items={byPatientType}
         />
 
       </div>
@@ -165,6 +216,12 @@ export default function InjuriesPage() {
                 patient.injury_diagnosis ||
                 patient.injury ||
                 'Sin diagnóstico';
+              const clinicalStatus = getClinicalStatus({
+                status: patient.status as any,
+                injuryDiagnosis: patient.injury_diagnosis,
+                injuryType: patient.injury_type,
+                archived: patient.archived,
+              });
 
               return (
                 <tr
@@ -193,21 +250,10 @@ export default function InjuriesPage() {
                     <span
                       className={cn(
                         'px-2 py-1 rounded text-[10px] font-bold uppercase',
-
-                        patient.status === 'ACTIVE'
-                          ? 'bg-green-100 text-green-700'
-
-                          : patient.status === 'DISCHARGED'
-                            ? 'bg-slate-100 text-slate-500'
-
-                            : 'bg-red-100 text-red-700'
+                        clinicalStatusColors[clinicalStatus]
                       )}
                     >
-                      {patient.status === 'ACTIVE'
-                        ? 'Activo'
-                        : patient.status === 'DISCHARGED'
-                          ? 'De alta'
-                          : 'Lesionado'}
+                      {clinicalStatusLabels[clinicalStatus]}
                     </span>
 
                   </td>
@@ -236,6 +282,52 @@ export default function InjuriesPage() {
   );
 }
 
+function MetricCard({
+  title,
+  value,
+  detail,
+  icon: Icon,
+  danger = false,
+  warning = false,
+}: {
+  title: string;
+  value: number;
+  detail: string;
+  icon: any;
+  danger?: boolean;
+  warning?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        'bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-4',
+        danger && 'border-l-4 border-l-red-500',
+        warning && 'border-l-4 border-l-amber-500'
+      )}
+    >
+      <div
+        className={cn(
+          'h-11 w-11 rounded-lg flex items-center justify-center',
+          danger
+            ? 'bg-red-50 text-red-600'
+            : warning
+              ? 'bg-amber-50 text-amber-600'
+              : 'bg-blue-50 text-primary'
+        )}
+      >
+        <Icon className="w-5 h-5" />
+      </div>
+      <div>
+        <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">
+          {title}
+        </p>
+        <p className="text-2xl font-bold text-slate-900">{value}</p>
+        <p className="text-xs font-medium text-slate-500">{detail}</p>
+      </div>
+    </div>
+  );
+}
+
 function countBy(
   patients: InjuryRow[],
   field: keyof InjuryRow,
@@ -251,7 +343,7 @@ function countBy(
       value = patient.injury;
     }
 
-    const key = value || fallback;
+    const key = String(value || fallback);
 
     result[key] = (result[key] || 0) + 1;
   });

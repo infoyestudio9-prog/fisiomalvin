@@ -33,6 +33,30 @@ const LOCAL_USERS: Array<User & { password: string }> = [
     role: 'PHYSIOTHERAPIST',
     avatar: '',
   },
+  {
+    id: 'user-fisio-martina',
+    name: 'Martina Pereira',
+    email: 'martina@fisiomalvin.com',
+    password: 'Martina',
+    role: 'PHYSIOTHERAPIST',
+    avatar: '',
+  },
+  {
+    id: 'user-fisio-valentina',
+    name: 'Valentina Silva',
+    email: 'valentina@fisiomalvin.com',
+    password: 'Valen',
+    role: 'PHYSIOTHERAPIST',
+    avatar: '',
+  },
+  {
+    id: 'user-fisio-camila',
+    name: 'Camila Rodríguez',
+    email: 'camila@fisiomalvin.com',
+    password: 'Camila',
+    role: 'PHYSIOTHERAPIST',
+    avatar: '',
+  },
 ];
 
 export default function LoginPage() {
