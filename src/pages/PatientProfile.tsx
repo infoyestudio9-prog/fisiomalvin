@@ -39,6 +39,7 @@ export default function PatientProfilePage() {
     getSessionsByPatient,
     currentUser,
     addSession,
+    updateSession,
   } = useClinic();
 
   const contextPatient = getPatientById(id || '');
@@ -97,6 +98,8 @@ const [editPatientForm, setEditPatientForm] = useState({
   const [selectedTags, setSelectedTags] = useState<string[]>(['Terapia Manual']);
   const [notes, setNotes] = useState('');
   const [result, setResult] = useState<'IMPROVED' | 'SAME' | 'WORSE'>('IMPROVED');
+  const [sessionDate, setSessionDate] = useState('');
+  const [editingSession, setEditingSession] = useState<Session | null>(null);
 
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [medicalNoteText, setMedicalNoteText] = useState('');
@@ -218,6 +221,26 @@ const recovery = recoveryProgress;
 
   const openSessionModal = () => {
     if (!patientCase || isDischarged) return;
+    setEditingSession(null);
+    setSessionDate(new Date().toISOString().slice(0, 16));
+    setPainBefore(4);
+    setPainAfter(2);
+    setSelectedTags(['Terapia Manual']);
+    setNotes('');
+    setResult('IMPROVED');
+    setShowSessionModal(true);
+  };
+
+  const openEditSessionModal = (session: Session) => {
+    if (!patientCase) return;
+
+    setEditingSession(session);
+    setSessionDate(new Date(session.date).toISOString().slice(0, 16));
+    setPainBefore(session.painBefore);
+    setPainAfter(session.painAfter);
+    setSelectedTags(session.treatmentTags || []);
+    setNotes(session.notes || '');
+    setResult(session.result);
     setShowSessionModal(true);
   };
 
@@ -271,24 +294,60 @@ const goToCase = () => {
   const handleSaveSession = async () => {
     if (!patientCase) return;
 
-    const newSession: Session = {
-      id: `session-${Date.now()}`,
+    const savedDate = sessionDate
+      ? new Date(sessionDate).toISOString()
+      : new Date().toISOString();
+
+    const sessionPayload: Session = {
+      id: editingSession?.id || `session-${Date.now()}`,
       patientId: patient.id,
-      clinicalCaseId: patientCase.id,
-      date: new Date().toISOString(),
-      professionalId: currentUser?.id || '',
+      clinicalCaseId: editingSession?.clinicalCaseId || patientCase.id,
+      date: savedDate,
+      professionalId: editingSession?.professionalId || currentUser?.id || '',
       painBefore,
       painAfter,
       treatmentTags: selectedTags,
       notes,
       result,
-      nextSessionDate: patient.nextSession || '',
-      needsMedicalReview: false,
+      nextSessionDate: editingSession?.nextSessionDate || patient.nextSession || '',
+      needsMedicalReview: editingSession?.needsMedicalReview || false,
     };
 
-    await addSession(newSession);
+    if (editingSession) {
+      const savedSession = await updateSession(sessionPayload);
+      if (!savedSession) return;
+    } else {
+      await addSession(sessionPayload);
+    }
+
+    const updatedSessionsCount = editingSession
+      ? sessions.length
+      : (patient.sessionsCompleted || sessions.length || 0) + 1;
+    const totalSessionsTarget = patient.totalSessionsTarget || 8;
+    const sessionProgress = Math.min(
+      100,
+      Math.round((updatedSessionsCount / totalSessionsTarget) * 100)
+    );
+    const painProgress = Math.max(
+      0,
+      Math.min(100, Math.round(((10 - painAfter) / 10) * 100))
+    );
+    const nextRecoveryProgress = Math.round(sessionProgress * 0.7 + painProgress * 0.3);
+
+    setSupabasePatient((prev: any) =>
+      prev
+        ? {
+            ...prev,
+            painLevel: painAfter,
+            sessionsCompleted: updatedSessionsCount,
+            lastSessionDate: savedDate,
+            recoveryProgress: nextRecoveryProgress,
+          }
+        : prev
+    );
 
     setShowSessionModal(false);
+    setEditingSession(null);
     setNotes('');
     setActiveTab('SESIONES');
   };
@@ -764,6 +823,7 @@ const handleSaveRecovery = async (
     <SessionsTable
       sessions={sessions}
       openSessionModal={openSessionModal}
+      onEditSession={openEditSessionModal}
       disabled={!patientCase || isDischarged}
       compact
     />
@@ -811,6 +871,7 @@ const handleSaveRecovery = async (
         <SessionsTable
           sessions={sessions}
           openSessionModal={openSessionModal}
+          onEditSession={openEditSessionModal}
           disabled={!patientCase || isDischarged}
         />
       )}
@@ -890,16 +951,22 @@ const handleSaveRecovery = async (
           patientCase={patientCase}
           painBefore={painBefore}
           painAfter={painAfter}
+          sessionDate={sessionDate}
           selectedTags={selectedTags}
           notes={notes}
           result={result}
+          isEditing={Boolean(editingSession)}
           treatmentOptions={treatmentOptions}
           setPainBefore={setPainBefore}
           setPainAfter={setPainAfter}
+          setSessionDate={setSessionDate}
           toggleTag={toggleTag}
           setNotes={setNotes}
           setResult={setResult}
-          onClose={() => setShowSessionModal(false)}
+          onClose={() => {
+            setShowSessionModal(false);
+            setEditingSession(null);
+          }}
           onSubmit={handleSaveSession}
         />
       )}
@@ -1083,7 +1150,7 @@ function CaseHistory({ cases }: { cases: any[] }) {
   );
 }
 
-function SessionsTable({ sessions, openSessionModal, disabled, compact = false }: any) {
+function SessionsTable({ sessions, openSessionModal, onEditSession, disabled, compact = false }: any) {
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
       <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center">
@@ -1120,13 +1187,14 @@ function SessionsTable({ sessions, openSessionModal, disabled, compact = false }
             <th className="px-6 py-3">Tratamiento aplicado</th>
             <th className="px-6 py-3">Notas clínicas</th>
             <th className="px-6 py-3">Resultado</th>
+            <th className="px-6 py-3 text-right">Acciones</th>
           </tr>
         </thead>
 
         <tbody>
           {sessions.length === 0 && (
             <tr>
-              <td colSpan={4} className="px-6 py-8 text-center text-slate-400 text-sm">
+              <td colSpan={5} className="px-6 py-8 text-center text-slate-400 text-sm">
                 Sin sesiones registradas todavía.
               </td>
             </tr>
@@ -1153,6 +1221,16 @@ function SessionsTable({ sessions, openSessionModal, disabled, compact = false }
                 <span className="bg-green-50 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase">
                   {s.result === 'IMPROVED' ? 'Exitosa' : s.result === 'WORSE' ? 'Empeoró' : 'Igual'}
                 </span>
+              </td>
+              <td className="px-6 py-4 text-right">
+                <button
+                  type="button"
+                  onClick={() => onEditSession(s)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  <Pencil className="h-4 w-4" />
+                  Editar
+                </button>
               </td>
             </tr>
           ))}
@@ -1485,7 +1563,7 @@ function SessionModal(props: any) {
       <div className="bg-white w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
           <h2 className="text-sm font-bold uppercase tracking-widest text-slate-800">
-            Registrar Evolución
+            {props.isEditing ? 'Editar Sesión' : 'Registrar Evolución'}
           </h2>
           <button onClick={props.onClose} className="text-slate-400 hover:text-slate-600">
             <X className="w-5 h-5" />
@@ -1506,6 +1584,17 @@ function SessionModal(props: any) {
           </div>
 
           <div className="grid grid-cols-2 gap-5">
+            <div className="col-span-2">
+              <label className="text-[10px] uppercase font-bold text-slate-400">
+                Fecha y hora
+              </label>
+              <input
+                type="datetime-local"
+                value={props.sessionDate}
+                onChange={(e) => props.setSessionDate(e.target.value)}
+                className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+            </div>
             <SliderInput label="Dolor Inicial" value={props.painBefore} onChange={props.setPainBefore} />
             <SliderInput label="Dolor Final" value={props.painAfter} onChange={props.setPainAfter} />
           </div>
@@ -1571,7 +1660,7 @@ function SessionModal(props: any) {
             Cancelar
           </button>
           <button onClick={props.onSubmit} className="px-8 py-3 bg-primary text-white rounded-lg text-xs font-bold uppercase tracking-widest shadow-sm hover:bg-primary-dark">
-            Finalizar Sesión
+            {props.isEditing ? 'Guardar Cambios' : 'Finalizar Sesión'}
           </button>
         </div>
       </div>

@@ -17,6 +17,7 @@ interface ClinicContextType {
   currentUser: User | null;
   setCurrentUser: (user: User | null) => void;
   addSession: (session: Session) => Promise<void>;
+  updateSession: (session: Session) => Promise<Session | null>;
   getPatientById: (id: string) => Patient | undefined;
   getClinicalCaseById: (id: string) => ClinicalCase | undefined;
   getSessionsByPatient: (id: string) => Session[];
@@ -201,6 +202,85 @@ const newRecoveryProgress = Math.round(
     );
   };
 
+  const updateSession = async (session: Session) => {
+    const professionalId = isValidUuid(session.professionalId)
+      ? session.professionalId
+      : null;
+
+    const { data, error } = await supabase
+      .from('sessions')
+      .update({
+        clinical_case_id: session.clinicalCaseId,
+        date: session.date,
+        professional_id: professionalId,
+        pain_before: session.painBefore,
+        pain_after: session.painAfter,
+        treatment_tags: session.treatmentTags,
+        notes: session.notes,
+        result: session.result,
+        next_session_date: session.nextSessionDate || null,
+        needs_medical_review: session.needsMedicalReview || false,
+      })
+      .eq('id', session.id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error actualizando sesión:', error);
+      alert('Error actualizando sesión');
+      return null;
+    }
+
+    const savedSession = mapSessionFromSupabase(data);
+    const updatedSessions = sessions
+      .map((item) => (item.id === savedSession.id ? savedSession : item))
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    const patientSessions = updatedSessions.filter((item) => item.patientId === savedSession.patientId);
+    const latestSession = patientSessions[0];
+    const patient = patients.find((item) => item.id === savedSession.patientId);
+
+    setSessions(updatedSessions);
+
+    if (latestSession && patient) {
+      const totalSessionsTarget = patient.totalSessionsTarget || 8;
+      const sessionProgress = Math.min(
+        100,
+        Math.round((patientSessions.length / totalSessionsTarget) * 100)
+      );
+      const painProgress = Math.max(
+        0,
+        Math.min(100, Math.round(((10 - latestSession.painAfter) / 10) * 100))
+      );
+      const newRecoveryProgress = Math.round(sessionProgress * 0.7 + painProgress * 0.3);
+
+      await supabase
+        .from('patients')
+        .update({
+          recovery_progress: newRecoveryProgress,
+          pain_level: latestSession.painAfter,
+          last_session_date: latestSession.date,
+          next_session: latestSession.nextSessionDate || null,
+        })
+        .eq('id', savedSession.patientId);
+
+      setPatients((prevPatients) =>
+        prevPatients.map((item) =>
+          item.id === savedSession.patientId
+            ? {
+                ...item,
+                recoveryProgress: newRecoveryProgress,
+                painLevel: latestSession.painAfter,
+                lastSessionDate: latestSession.date,
+                nextSession: latestSession.nextSessionDate,
+              }
+            : item
+        )
+      );
+    }
+
+    return savedSession;
+  };
+
   const getPatientById = (id: string) => patients.find((p) => p.id === id);
   const getClinicalCaseById = (id: string) => clinicalCases.find((c) => c.id === id);
   const getSessionsByPatient = (id: string) => sessions.filter((s) => s.patientId === id);
@@ -216,6 +296,7 @@ const newRecoveryProgress = Math.round(
         currentUser,
         setCurrentUser,
         addSession,
+        updateSession,
         getPatientById,
         getClinicalCaseById,
         getSessionsByPatient,
